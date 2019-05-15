@@ -67,8 +67,8 @@ void write_array() {
   Context ctx;
 
   // Write some simple data to cells (1, 1), (2, 4) and (2, 3).
-  std::vector<int> coords = {1, 1, 2, 4, 2, 3};
-  std::vector<int> data = {1, 2, 3};
+  std::vector<int> coords = {1, 1, 1,3, 2, 2, 2, 4, 3,1,3,4};
+  std::vector<int> data = {1, 2, 3,4,5,6};
 
   // Open the array for writing and create the query.
   Array array(ctx, array_name, TILEDB_WRITE);
@@ -101,7 +101,7 @@ void read_array_region() {
   // Prepare the query
   Query query(ctx, array, TILEDB_READ);
   query.set_subarray(subarray)
-      .set_layout(TILEDB_ROW_MAJOR)
+      .set_layout(TILEDB_UNORDERED)
       .set_buffer("a", data)
       .set_coordinates(coords);
 
@@ -122,23 +122,31 @@ void read_array_point() {
 
   // Prepare the array for reading
   Array array(ctx, array_name, TILEDB_READ);
+  Query query(ctx, array, TILEDB_READ);
+  Subarray subarray(ctx, array, TILEDB_ROW_MAJOR);
 
   // Slice only rows 1, 2 and cols 2, 3, 4
-  Subarray subarray(ctx, array, TILEDB_UNORDERED);
-  std::vector<std::pair<int, int>> coords = {{2,4},{2,3}};
-  for(auto p : coords)
+  std::vector<int> ridx = {1,2,3,4};
+  std::vector<int> cidx = {1,2,3,4};
+  for(unsigned i = 0; i < ridx.size(); i++)
   {
-	  int rng1[] = {p.first, p.first};
-	  subarray.add_range(0, rng1);
-	  int rng2[] = {p.second, p.second};
-	  subarray.add_range(1, rng2);
-  }
-  std::vector<int> data(4);
 
+	  int rng1[] = {ridx[i], ridx[i]};
+	  subarray.add_range(0, rng1);
+
+  }
+  for(unsigned i = 0; i < cidx.size(); i++)
+  {
+
+	  int rng1[] = {cidx[i], cidx[i]};
+	  subarray.add_range(1, rng1);
+
+  }
+  std::vector<int> data(ridx.size() * cidx.size());
+
+  query.set_subarray(subarray);
 
   // Prepare the query
-  Query query(ctx, array, TILEDB_READ);
-  query.set_subarray(subarray);
   query.set_layout(TILEDB_ROW_MAJOR)
       .set_buffer("a", data);
 //      .set_coordinates(coords);
@@ -148,21 +156,23 @@ void read_array_point() {
   array.close();
 
   // Print out the results.
-  auto result_num = (int)query.result_buffer_elements()["a"].second;
-  for (int r = 0; r < result_num; r++) {
-//    int i = coords[2 * r], j = coords[2 * r + 1];
-    int a = data[r];
-    std::cout << a << "\n";
+  for (int r = 0; r < ridx.size(); r++) {
+	  for (int c = 0; c < cidx.size(); c++) {
+
+	    std::cout << data[r * cidx.size() + c]<< " ";
+
+	  }
+    std::cout << "\n";
   }
 }
 int main() {
   Context ctx;
 
   if (Object::object(ctx, array_name).type() != Object::Type::Array) {
-//    create_array();
-//    write_array();
+    create_array();
+    write_array();
   }
-
+//  read_array_region();
   read_array_point();
   return 0;
 }
