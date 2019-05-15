@@ -6,8 +6,7 @@
  */
 
 #include "tiledb_sparse_header.h"
-#include <tiledb/query.h>
-#include <tiledb/array.h>
+#include <tiledb/tiledb>
 
 using namespace std;
 void create_tiledb(const string & dbdir, const string & attr, array<unsigned, 2> row_domain, array<unsigned, 2> col_domain) {
@@ -27,10 +26,14 @@ void create_tiledb(const string & dbdir, const string & attr, array<unsigned, 2>
 
   // Create attributes
   tiledb::Attribute a1 = tiledb::Attribute::create<int>(ctx, attr);
-  a1.set_compressor({TILEDB_LZ4, -1});
+  tiledb::Filter filter1(ctx, TILEDB_FILTER_LZ4);
+  filter1.set_option(TILEDB_COMPRESSION_LEVEL, -1);
+  tiledb::FilterList filter_list1(ctx);
+  filter_list1.add_filter(filter1);
+  a1.set_filter_list(filter_list1);
 
   // Create array schema
-  tiledb::ArraySchema schema(ctx, TILEDB_DENSE);
+  tiledb::ArraySchema schema(ctx, TILEDB_SPARSE);
   schema.set_order({{TILEDB_COL_MAJOR, TILEDB_COL_MAJOR}});
 //  schema.set_capacity(2);
   schema.set_domain(domain);
@@ -53,59 +56,63 @@ void create_tiledb(const string & dbdir, const string & attr, array<unsigned, 2>
 //  return 0;
 }
 
-void write_tiledb(const string & dbdir, const string & attr, const vector<int> & data) {
+//void write_tiledb(const string & dbdir, const string & attr, vector<int> & data) {
+//  // Create TileDB context
+//  tiledb::Context ctx;
+//  tiledb::Array array(ctx, dbdir, TILEDB_WRITE);
+//
+//  // Create query
+//  tiledb::Query query(ctx, array, TILEDB_WRITE);
+//  query.set_layout(TILEDB_GLOBAL_ORDER);
+////  query.set_subarray<unsigned>({ridx[0], ridx[1], cidx[0], cidx[1]});
+//
+//  query.set_buffer(attr, data);
+////  query.set_buffer("a2", a2_buff);
+////  query.set_buffer("a3", a3_buff);
+////  query.set_coordinates(coords);
+//
+//  // Submit query
+//  query.submit();
+//
+////  tiledb_query_reset_buffers();
+////  query.set_buffer(attr, data.data()+8, 8);
+//  // Finalize query
+//  query.finalize();
+//
+//  // Nothing to clean up - all C++ objects are deleted when exiting scope
+//
+////  return 0;
+//}
+void write_tiledb_sparse(const string & dbdir, const string & attr, vector<int> & data) {
   // Create TileDB context
   tiledb::Context ctx;
 
   // Create query
-  tiledb::Query query(ctx, dbdir, TILEDB_WRITE);
+  tiledb::Array array(ctx, dbdir, TILEDB_WRITE);
+
+   // Create query
+   tiledb::Query query(ctx, array, TILEDB_WRITE);
   query.set_layout(TILEDB_GLOBAL_ORDER);
 //  query.set_subarray<unsigned>({ridx[0], ridx[1], cidx[0], cidx[1]});
 
-  query.set_buffer(attr, data.data(), 16);
+  query.set_buffer(attr, data.data(), 3);
 //  query.set_buffer("a2", a2_buff);
 //  query.set_buffer("a3", a3_buff);
-//  query.set_coordinates(coords);
-
-  // Submit query
-  query.submit();
-
-//  tiledb_query_reset_buffers();
-//  query.set_buffer(attr, data.data()+8, 8);
-  // Finalize query
-  query.finalize();
-
-  // Nothing to clean up - all C++ objects are deleted when exiting scope
-
-//  return 0;
-}
-void write_tiledb_sparse(const string & dbdir, const string & attr, const vector<int> & data) {
-  // Create TileDB context
-  tiledb::Context ctx;
-
-  // Create query
-  tiledb::Query query(ctx, dbdir, TILEDB_WRITE);
-  query.set_layout(TILEDB_GLOBAL_ORDER);
-//  query.set_subarray<unsigned>({ridx[0], ridx[1], cidx[0], cidx[1]});
-
-  query.set_buffer(attr, data.data(), 2);
-//  query.set_buffer("a2", a2_buff);
-//  query.set_buffer("a3", a3_buff);
-  std::vector<unsigned> coords = {1,1,2,1};
+  std::vector<unsigned> coords = {1,1,2,1,3,3};
   query.set_coordinates(coords);
 
   // Submit query
   query.submit();
 
 //  tiledb_query_reset_buffers();
-  query.set_buffer(attr, data.data()+2, 2);
-  std::vector<unsigned> coords1 = {1,2,3,3};
-  query.set_coordinates(coords1);
-  query.submit();
+//  query.set_buffer(attr, data.data()+2, 2);
+//  std::vector<unsigned> coords1 = {1,2,3,3};
+//  query.set_coordinates(coords1);
+//  query.submit();
 
   // Finalize query
-  query.finalize();
-
+//  query.finalize();
+  array.close();
   // Nothing to clean up - all C++ objects are deleted when exiting scope
 
 //  return 0;
@@ -127,26 +134,39 @@ void query_dim(const string & dbdir){
 void point_selection_tiledb(const string & dbdir, const string & attr, int * buf, vector<unsigned> ridx, vector<unsigned> cidx) {
   // Create TileDB Context
 	tiledb::Context ctx;
+	 // Create query
+	tiledb::Array array(ctx, dbdir, TILEDB_READ);
+
+	// Create query
+	tiledb::Query query(ctx, array, TILEDB_READ);
+	  tiledb::Subarray subarray(ctx, array, TILEDB_UNORDERED);
 
 //  dims[0].domain()
 //check ridx,cidx and buf size
   int cnt = 0;
   for(auto j : cidx)
+  {
+	  unsigned range[] = {j,j};
+	  subarray.add_range(1, range);
+
 	  for(auto i : ridx)
 	  {
-		  // Create query
-		  tiledb::Query query(ctx, dbdir, TILEDB_READ);
-		  query.set_layout(TILEDB_COL_MAJOR);
-		  query.set_subarray<unsigned>({i, i, j, j});
-		  query.set_buffer(attr, &(buf[cnt++]), 1);
-		  query.submit();
-		  query.finalize();
+		  unsigned range[] = {i, i};
+
+		  subarray.add_range(0, range);
+
 //		  auto result_el = query.result_buffer_elements();
 //		  if(result_el["a1"].second > 0)
 //			  cout << buf[cnt-1] << endl;
 //		  cnt++;
 	  }
+  }
+  query.set_layout(TILEDB_COL_MAJOR);
+  query.set_subarray(subarray);
 
+  query.set_buffer(attr, &(buf[cnt++]), 1);
+  query.submit();
+  query.finalize();
 
 //  for (unsigned i = 0; i < result_el["a1"].second; ++i)
 //    std::cout << a1_data[i] << "\n";
@@ -161,18 +181,21 @@ void region_selection_tiledb(const string & dbdir,  const string & attr, int * b
 
 //check ridx,cidx and buf size
 	  // Create query
-  	  tiledb::Query query(ctx, dbdir, TILEDB_READ);
+  tiledb::Array array(ctx, dbdir, TILEDB_READ);
+
+  	  tiledb::Query query(ctx, array, TILEDB_READ);
   	  query.set_layout(TILEDB_COL_MAJOR);
   	  const std::vector<unsigned> subarray = {ridx[0], ridx[1], cidx[0], cidx[1]};
   	  query.set_subarray(subarray);
-	  auto max_sizes = tiledb::Array::max_buffer_elements(ctx, dbdir, subarray);
+//	  auto max_sizes = tiledb::Array::max_buffer_elements(ctx, dbdir, subarray);
 //	  std::vector<unsigned> coords_buff(max_sizes[TILEDB_COORDS].second);
 
 	  query.set_buffer(attr, buf, size);
 //	  query.set_coordinates(coords_buff);
 
 	  query.submit();
-	  query.finalize();
+//	  query.finalize();
+	  array.close();
 
 //	  auto result_el = query.result_buffer_elements();
 //	  auto nElements = result_el[attr].second;
@@ -203,28 +226,30 @@ int main(){
 	string dbfile = "my_sparse_array";
 	string attr = "a1";
 
-	array<unsigned, 2> row_domain={{1,4}};
-	array<unsigned, 2> col_domain={{1,4}};
+//	array<unsigned, 2> row_domain={{1,4}};
+//	array<unsigned, 2> col_domain={{1,4}};
 //	create_tiledb(dbfile, attr, row_domain, col_domain);
 	// Prepare cell buffers
 	std::vector<int> data = {0, 1, 2, 3, 4, 5, 6, 7,8,9,10,11,12,13,14,15};
 //	std::vector<int> data = {0, 1, 2, 3, 4, 5, 6, 7,8,9,10,11,12,13,14,15};
 //	std::vector<unsigned> coords = {1, 1, 1, 2, 1, 4, 2, 3, 3, 1, 4, 2, 3, 3, 3, 4};
 	query_dim(dbfile);
-
-//	write_tiledb_sparse(dbfile, attr,{1,2,3,4});
-	write_tiledb(dbfile, attr, data);
+	std::vector<int> data1 = {1,2,3};
+	write_tiledb_sparse(dbfile, attr,data1);
+//	write_tiledb(dbfile, attr, data);
 //	write_tiledb(dbfile, attr, data, {1,4}, {3,4});
-//	int output[4]={0};
-	vector<unsigned> i = {1,3};
-	vector<unsigned> j = {2,4};
-//	point_selection_tiledb(dbfile, attr, output, i, j);
-//	for(auto v : output)
-//		cout << v << ", ";
-//	cout << endl;
+	int output[6]={0};
+	vector<unsigned> i = {1,2,3};
+	vector<unsigned> j = {1,1,3};
+	point_selection_tiledb(dbfile, attr, output, i, j);
+	for(auto v : output)
+		cout << v << ", ";
+	cout << endl;
 
-	int output1[9]={0};
-	region_selection_tiledb(dbfile, attr, output1, 9, i, j);
+	vector<unsigned> ridx = {1,4};
+	vector<unsigned> cidx = {1,4};
+	int output1[16]={0};
+	region_selection_tiledb(dbfile, attr, output1, 16, ridx, cidx);
 	for(auto v : output1)
 			cout << v << ", ";
 		cout << endl;
